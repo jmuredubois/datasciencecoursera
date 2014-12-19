@@ -5,8 +5,12 @@ Predicitive machine learning week 3 assignment
 
 ## Load training data
 `data <- read.csv("pml-testing.csv")`
+
 or better
+
 `data <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!"), as.is=6:154)`
+
+Since the presence of "#DIV/0!" (yeah Excel) in the data caused many variables to be imported as strings instead of floating point.
 
 19622 observations and **160** variables :
 
@@ -53,11 +57,129 @@ The training data may be slightly skewed towards class A, but this does not seem
 
 `training <- data[inTrain, 6:159]`
 
-`testing <- data[-inTrain, 6:159]`
+`testTrn <- data[-inTrain, 6:159]`
 
-`preProc <- preProcess(training, method="pca")`
+## Clean-up training data
+A couple of issues here :
 
-This fails with : 
-`Erreur dans preProcess.default(trainSafe, method = "pca") : 
-  all columns of x must be numeric`
-  
+* many columns have mostly NA values, it makes no sense to use those
+* 3 columns have zero variance, and are therefore uselsee in classification
+* the new_window column contains yes/no instead of a numeric value
+
+### Transforming new_window into logical values
+`newW <- charmatch(training$new_window, c("yes","no"))`
+
+`trainSafe <- training`
+
+`trainSafe$new_window <- newW`
+
+### Removing columns with more than 80% NA
+`naCols <- colSums(is.na(trainSafe))`
+
+`goodCols <- as.vector(naCols)/dim(trainSafe)[2] < 0.2`
+
+`nGoodCols <- sum(goodCols)`
+
+`badColNames <- names(trainSafe)`
+`badColNames <- badColNames[!goodCols]`
+`badColNames <- badColNames[!is.na(badColNames)]`
+
+`trainSafeNA <- trainSafe[, !names(trainSafe) %in% badColNames ]`
+
+### Removing zero variance columns
+Very similar too removing columns with too many NA, only the condition is different
+
+`varCols <- apply(trainSafeNA, 2, var, na.rm=TRUE)`
+
+`goodCols <- abs(as.vector(varCols)) > 1e-3`
+
+`badColNames <- names(trainSafeNA)`
+`badColNames <- badColNames[!goodCols]`
+`badColNames <- badColNames[!is.na(badColNames)]`
+
+`trainSafeVar <- trainSafeNA[, !names(trainSafeNA) %in% badColNames ]`
+
+## Perform PCA on training data
+`preProc <- preProcess(trainSafeVar, thresh=0.85, method="pca")`
+
+Here, a 85% threshold was chosen. This results in keeping only 17 PC variables.
+
+Compute those PC variables for the training set :
+
+`trainPC <- predict(preProc, trainSafeVar)`
+
+## Train a model based on PC coefficients
+`model <- train(x=trainPC, y=data$classe[inTrain], method="knn", metric="Accuracy")`
+
+This takes quite some time. Here a k- nearest neighbors model was chosen. This seems more sensible than a generalized linear model since there is no reason to have linear separations between activities.
+
+### Check in-sample error
+The confusion matrix can be obtained by comparing the model predictions to the ground truth :
+
+`predTrain <- predict(model, trainPC)`
+
+`confTrain <- confusionMatrix(predTrain, data$classe[inTrain])`
+
+![Confusion matrix for training data](confMat_Train.png "Confusion matrix for training data")
+
+The observed in-sample accuracy is 96.4% and the Kappa is 95.4%, which are both very good. This should raise the question of overfitting to the training data. To make sure that we did not overfit, we need to get similar figure for test data.
+
+## Predict values for test data
+First, PC coefficients have to be computed for the test points.
+
+`newW <- charmatch(testTrn$new_window, c("yes","no"))`
+
+`testTrnSafe <- testTrn`
+
+`testTrnSafe$new_window <- newW`
+
+`testTrnNA <- testTrnSafe[, !names(testTrnSafe) %in% badColNamesNA ]`
+
+`testTrnVar <- testTrnNA[, !names(testTrnNA) %in% badColNamesVar ]`
+
+`testTrnPC <- predict(preProc, testTrnVar)`
+
+Finally the model can be used on these data points, and the confusion matrix can be displayed : 
+
+`confTestTrn <- confusionMatrix(predTestTrn, data$classe[-inTrain])`
+
+![Confusion matrix for test data](confMat_testTrn.png "Confusion matrix for test data")
+
+Here again, the observed out-of-sample accuracy and Kappa are very good : 92.7% and 90.8% respectively.
+
+
+# Prediction for assignment data
+## Load and format the data
+`dttest <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!"), as.is=6:154)`
+
+`testing <- dttest[, 6:159]`
+
+`newW <- charmatch(testing$new_window, c("yes","no"))`
+
+`testSafe <- testing`
+
+`testSafe$new_window <- newW`
+
+`testNA <- testSafe[, !names(testSafe) %in% badColNamesNA ]`
+
+`testVar <- testNA[, !names(testNA) %in% badColNamesVar ]`
+
+## PCA pre-processing
+`testPC <- predict(preProc, testVar)`
+
+## Prediction
+`predTest <- predict(model, testPC)`
+
+The result is the following :
+
+`predTest
+ [1] B A A A A E D C A A B C B A E E A B B B
+Levels: A B C D E`
+
+## Formatting for submission files generation
+`answers <- as.vector(predTest)`
+`source("pml_write_files.R")`
+`pml_write_files(answers)`
+
+## Feedback after submission
+On these 20 testing cases, the k-nearest neighbors model developepd here gets 18 correct answers. This 90% accuracy is similar to what was expected for the out-of-sample error.
