@@ -1,14 +1,21 @@
+library(ggplot2)
+library(plyr)
 library(caret)
 library(kernlab)
 #library(RSNNS)
 
+# move to path on my machine where the data is
+setwd("/Volumes/mediaOSX/R/datascitoolbox_assign01/datasciencecoursera")
+
 ## the presence of #DIV/0! (yeah Excel) in the data caused many variables to be imported as strings 
-setwd("/Volumes/mediaOSX/R/predmachlearn")
 data <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!"), as.is=6:154)
 
 data[1:5,]
 
+png("training_classes.png", width=640, height=480)
 barplot(table(data$classe))
+dev.off()
+#ggsave("training_classes.png", width=640, height=480)
 
 inTrain = createDataPartition(data$classe, p = 6/10)[[1]]
 
@@ -50,6 +57,29 @@ trainPC <- predict(preProc, trainSafeVar)
 
 ## train KNN model
 model <- train(x=trainPC, y=data$classe[inTrain], method="knn", metric="Accuracy")
+# plot model
+ggplot(model)
+ggsave("knn_model_ggplot.png", width=640, height=480)
+
+# prediction on training set
+predTrain <- predict(model, trainPC)
+confTrain <- confusionMatrix(predTrain, data$classe[inTrain])
+
+## cross-validation
+cvFolds <- createFolds(1:dim(trainPC)[1],10)
+
+resFolds <- NULL
+for(fold in cvFolds){
+  trainFolds <- trainPC[-fold,]
+  testFolds <- trainPC[fold,]
+  
+  ## train KNN model
+  modelFolds <- train(x=trainFolds, y=data$classe[inTrain[-fold]], method="knn", metric="Accuracy")
+  predFolds <- predict(modelFolds, testFolds)
+  confFolds <- confusionMatrix(predFolds, data$classe[inTrain[fold]])
+  resFolds <- c(resFolds, confFolds)
+}
+
 
 ## predict values for test set
 newW <- charmatch(testTrn$new_window, c("yes","no"))
@@ -62,10 +92,8 @@ testTrnNA <- NULL # free some memory
 
 testTrnPC <- predict(preProc, testTrnVar)
 predTestTrn <- predict(model, testTrnPC)
-predTrain <- predict(model, trainPC)
 
 ## compare confusion matrices
-confTrain <- confusionMatrix(predTrain, data$classe[inTrain])
 confTestTrn <- confusionMatrix(predTestTrn, data$classe[-inTrain])
 
 
