@@ -59,14 +59,14 @@ trainPC <- predict(preProc, trainSafeVar)
 model <- train(x=trainPC, y=data$classe[inTrain], method="knn", metric="Accuracy")
 # plot model
 ggplot(model)
-ggsave("knn_model_ggplot.png", width=640, height=480)
+#ggsave("knn_model_ggplot.png", width=2.13, height=1,6)
 
 # prediction on training set
 predTrain <- predict(model, trainPC)
 confTrain <- confusionMatrix(predTrain, data$classe[inTrain])
 
 ## cross-validation
-cvFolds <- createFolds(1:dim(trainPC)[1],10)
+cvFolds <- createFolds(1:dim(trainPC)[1],4)
 
 resFolds <- NULL
 for(fold in cvFolds){

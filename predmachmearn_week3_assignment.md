@@ -151,6 +151,24 @@ confTrain <- confusionMatrix(predTrain, data$classe[inTrain])
 
 The observed in-sample accuracy is 96.4% and the Kappa is 95.4%, which are both very good. This should raise the question of overfitting to the training data. To make sure that we did not overfit, we need to get similar figure for test data.
 
+## Cross-validation
+```r
+cvFolds <- createFolds(1:dim(trainPC)[1],4)
+
+resFolds <- NULL
+for(fold in cvFolds){
+  trainFolds <- trainPC[-fold,]
+  testFolds <- trainPC[fold,]
+  
+  ## train KNN model
+  modelFolds <- train(x=trainFolds, y=data$classe[inTrain[-fold]], method="knn", metric="Accuracy")
+  predFolds <- predict(modelFolds, testFolds)
+  confFolds <- confusionMatrix(predFolds, data$classe[inTrain[fold]])
+  resFolds <- c(resFolds, confFolds)
+}
+```
+This should allow for cross-validation, but actually brings my old MacBook to its knees, because of an SSD bug that prevents it from staying on for more than 1 hour at a time.
+
 ## Predict values for test data
 First, PC coefficients have to be computed for the test points.
 
