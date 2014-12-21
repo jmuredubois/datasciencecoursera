@@ -22,8 +22,6 @@ inTrain = createDataPartition(data$classe, p = 6/10)[[1]]
 training <- data[inTrain, 6:159]
 testTrn <- data[-inTrain, 6:159]
 
-#preProc <- preProcess(training, method="pca")
-
 newW <- charmatch(training$new_window, c("yes","no"))
 
 trainSafe <- training
@@ -53,6 +51,7 @@ trainSafeNA <- NULL # free some memory
 
 ## perform PCA
 preProc <- preProcess(trainSafeVar, thresh=0.85, method="pca")
+message("PCA preprocessing simplified to ", preProc$numComp, " variables.")
 trainPC <- predict(preProc, trainSafeVar)
 
 ## train KNN model
@@ -60,15 +59,22 @@ model <- train(x=trainPC, y=data$classe[inTrain], method="knn", metric="Accuracy
 # plot model
 ggplot(model)
 #ggsave("knn_model_ggplot.png", width=2.13, height=1,6)
+message("Tuned k for knn model : ", model$bestTune)
 
 # prediction on training set
 predTrain <- predict(model, trainPC)
 confTrain <- confusionMatrix(predTrain, data$classe[inTrain])
+#message("Training confusion matrix : ", confTrain)
+message("Training set accuracy : ", confTrain$overall[1])
+message("Training set Kappa : ", confTrain$overall[2])
 
 ## cross-validation
 cvFolds <- createFolds(1:dim(trainPC)[1],4)
 
+i <- 0 
 resFolds <- NULL
+cvAccuracy <- NULL
+cvKappa <- NULL
 for(fold in cvFolds){
   trainFolds <- trainPC[-fold,]
   testFolds <- trainPC[fold,]
@@ -77,8 +83,21 @@ for(fold in cvFolds){
   modelFolds <- train(x=trainFolds, y=data$classe[inTrain[-fold]], method="knn", metric="Accuracy")
   predFolds <- predict(modelFolds, testFolds)
   confFolds <- confusionMatrix(predFolds, data$classe[inTrain[fold]])
-  resFolds <- c(resFolds, confFolds)
+  save(confFolds, file="confFolds.rdt")
+  i <- i + 1
+  cvAccuracy[[i]] <- confFolds$overall[1]
+  cvKappa[[i]] <- confFolds$overall[2]
+  resFolds[[i]] <- confFolds
+  save(resFolds, file="resFolds.rdt")
 }
+cvMeanAccuracy <- mean(cvAccuracy)
+message("Cross-Validation average accuracy : ", cvMeanAccuracy)
+cvAccuracyStd <- std(cvAccuracy)
+message("Cross-Validation accuracy standard deviation: ", cvAccuracyStd)
+cvMeanKappa <- mean(cvKappa)
+message("Cross-Validation average Kappa : ", cvMeanKappa)
+cvKappaStd <- std(cvKappa)
+message("Cross-Validation Kappa standard deviation: ", cvKappaStd)
 
 
 ## predict values for test set
@@ -95,6 +114,8 @@ predTestTrn <- predict(model, testTrnPC)
 
 ## compare confusion matrices
 confTestTrn <- confusionMatrix(predTestTrn, data$classe[-inTrain])
+message("Testing set accuracy : ", confTestTrn$overall[1])
+message("Testing set Kappa : ", confTestTrn$overall[2])
 
 
 # LOAD TESTING DATA
